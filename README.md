@@ -3,6 +3,7 @@
 --
 https://www.javatips.net/api/org.fourthline.cling.support.model.res
 
+http://4thline.org/projects/cling/core/manual/cling-core-manual.xhtml
 
 https://github.com/kutayzorlu/Connect-SDK-Android-API-Sampler
 
