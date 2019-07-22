@@ -2,6 +2,8 @@
 
 ---
 
+https://www.javatips.net/api/popcorn-android-master/connectsdk/core/src/com/connectsdk/service/DLNAService.java
+
 ####
  ->  cling/support/src/test/java/example/mediaserver/ConnectionManagerSimpleTest.java
 
