@@ -5,7 +5,7 @@
 ####
  ->  cling/support/src/test/java/example/mediaserver/ConnectionManagerSimpleTest.java
 
-
+http://192.168.19.111:9197/  cling/demo/android/light/src/main/java/org/fourthline/cling/demo/android/light/LightActivity.java
 
 ## Cling - The UPnP stack for Java and Android
 
