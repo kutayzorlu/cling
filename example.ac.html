@@ -1,0 +1,357 @@
+http://4thline.org/projects/cling/support/xref-test/example/mediarenderer/
+
+
+View Javadoc
+1   /*
+2    * Copyright (C) 2013 4th Line GmbH, Switzerland
+3    *
+4    * The contents of this file are subject to the terms of either the GNU
+5    * Lesser General Public License Version 2 or later ("LGPL") or the
+6    * Common Development and Distribution License Version 1 or later
+7    * ("CDDL") (collectively, the "License"). You may not use this file
+8    * except in compliance with the License. See LICENSE.txt for more
+9    * information.
+10   *
+11   * This program is distributed in the hope that it will be useful,
+12   * but WITHOUT ANY WARRANTY; without even the implied warranty of
+13   * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+14   */
+15  package example.mediarenderer;
+16  
+17  import org.fourthline.cling.controlpoint.ActionCallback;
+18  import org.fourthline.cling.model.action.ActionInvocation;
+19  import org.fourthline.cling.model.message.UpnpResponse;
+20  import org.fourthline.cling.model.meta.LocalService;
+21  import org.fourthline.cling.support.avtransport.callback.GetCurrentTransportActions;
+22  import org.fourthline.cling.support.avtransport.callback.GetDeviceCapabilities;
+23  import org.fourthline.cling.support.avtransport.callback.GetMediaInfo;
+24  import org.fourthline.cling.support.avtransport.callback.GetPositionInfo;
+25  import org.fourthline.cling.support.avtransport.callback.GetTransportInfo;
+26  import org.fourthline.cling.support.avtransport.callback.Play;
+27  import org.fourthline.cling.support.avtransport.callback.SetAVTransportURI;
+28  import org.fourthline.cling.support.avtransport.callback.Stop;
+29  import org.fourthline.cling.support.avtransport.impl.AVTransportService;
+30  import org.fourthline.cling.support.avtransport.lastchange.AVTransportLastChangeParser;
+31  import org.fourthline.cling.support.avtransport.lastchange.AVTransportVariable;
+32  import org.fourthline.cling.support.lastchange.LastChange;
+33  import org.fourthline.cling.support.lastchange.LastChangeAwareServiceManager;
+34  import org.fourthline.cling.support.model.DeviceCapabilities;
+35  import org.fourthline.cling.support.model.MediaInfo;
+36  import org.fourthline.cling.support.model.PositionInfo;
+37  import org.fourthline.cling.support.model.TransportAction;
+38  import org.fourthline.cling.support.model.TransportInfo;
+39  import org.fourthline.cling.support.model.TransportState;
+40  import org.testng.annotations.Test;
+41  
+42  import java.beans.PropertyChangeEvent;
+43  import java.beans.PropertyChangeListener;
+44  import java.beans.PropertyChangeSupport;
+45  import java.net.URI;
+46  import java.util.Arrays;
+47  import java.util.List;
+48  
+49  import static org.testng.Assert.assertEquals;
+50  
+51  /**
+52   * Creating a renderer from scratch
+53   * <p>
+54   * Cling Support provides a state machine for managing the current state of your
+55   * playback engine. This feature simplifies writing a media player with a UPnP
+56   * renderer control interface. There are several steps involved
+57   * </p>
+58   * <div class="section">
+59   * <div class="title">Defining the states of the player</div>
+60   * <div class="content">
+61   * <p>
+62   * First, define your state machine and what states are supported by your player:
+63   * </p>
+64   * <a class="citation" href="javacode://example.mediarenderer.MyRendererStateMachine"/>
+65   * <p>
+66   * This is a very simple player with only three states: The initial state when no
+67   * media is present, and the Playing and Stopped states. You can also support
+68   * additional states, such as Paused and Recording but we want to keep this example
+69   * as simple as possible. (Also compare the "Theory of Operation" chapter and state
+70   * chart in the <em>AVTransport:1</em> specification document, section 2.5.)
+71   * </p>
+72   * <p>
+73   * Next, implement the states and the actions that trigger a transition from one
+74   * state to the other.
+75   * </p>
+76   * <a class="citation" href="javadoc://example.mediarenderer.MyRendererNoMediaPresent" style="read-title: false;"/>
+77   * <a class="citation" href="javadoc://example.mediarenderer.MyRendererStopped" style="read-title: false;"/>
+78   * <a class="citation" href="javadoc://example.mediarenderer.MyRendererPlaying" style="read-title: false;"/>
+79   * <p>
+80   * So far there wasn't much UPnP involved in writing your player - Cling just provided
+81   * a state machine for you and a way to signal state changes to clients through
+82   * the <code>LastEvent</code> interface.
+83   * </p>
+84   * </div>
+85   * </div>
+86   * <div class="section">
+87   * <div class="title">Registering the AVTransportService</div>
+88   * <div class="content">
+89   * <p>
+90   * Your next step is wiring the state machine into the UPnP service, so you can add the
+91   * service to a device and finally the Cling registry. First, bind the service and define
+92   * how the service manager will obtain an instance of your player:
+93   * </p>
+94   * <a class="citation" href="javacode://example.mediarenderer.MediaRendererSampleData#createAVTransportService()" style="include: INC1;"/>
+95   * <p>
+96   * The constructor takes two classes, one is your state machine definition, the other the
+97   * initial state of the machine after it has been created.
+98   * </p>
+99   * <p>
+100  * That's it - you are ready to add this service to a <em>MediaRenderer:1</em> device and
+101  * control points will see it and be able to call actions.
+102  * </p>
+103  * <p>
+104  * However, there is one more detail you have to consider: Propagation of <code>LastChange</code>
+105  * events. Whenever any player state or transition adds a "change" to <code>LastChange</code>, this
+106  * data will be accumulated. It will <em>not</em> be send to GENA subscribers immediately or
+107  * automatically! It's up to you how and when you want to flush all accumulated changes to
+108  * control points. A common approach would be a background thread that executes this operation every
+109  * second (or even more frequently):
+110  * </p>
+111  * <a class="citation" id="avtransport_flushlastchange" href="javacode://this#testCustomPlayer" style="include: INC2;"/>
+112  * <p>
+113  * Finally, note that the <em>AVTransport:1</em> specification also defines "logical"
+114  * player instances. For examle, a renderer that can play two URIs simultaneously would have
+115  * two <em>AVTransport</em> instances, each with its own identifier. The reserved identifier
+116  * "0" is the default for a renderer that only supports playback of a single URI at a time.
+117  * In Cling, each logical <em>AVTransport</em> instance is represented by one instance of a
+118  * state machine (with all its states) associated with one instance of the <code>AVTransport</code>
+119  * type. All of these objects are never shared, and they are not thread-safe. Read the documentation and
+120  * code of the <code>AVTransportService</code> class for more information on this feature -
+121  * by default it supports only a single transport instance with ID "0", you have to override
+122  * the <code>findInstance()</code> methods to create and support several parallel playback
+123  * instances.
+124  * </p>
+125  * </div>
+126  * </div>
+127  */
+128 public class AVTransportTest {
+129 
+130     /**
+131      * Controlling a renderer
+132      * <p>
+133      * Cling Support provides several action callbacks that simplify creating a control
+134      * point for the <em>AVTransport</em> service. This is the client side of your player,
+135      * the remote control.
+136      * </p>
+137      * <p>
+138      * This is how you set an URI for playback:
+139      * </p>
+140      * <a class="citation" id="avtransport_ctrl1" href="javacode://this#testCustomPlayer" style="include: CTRL1;"/>
+141      * <p>
+142      * This is how you actually start playback:
+143      * </p>
+144      * <a class="citation" id="avtransport_ctrl2" href="javacode://this#testCustomPlayer" style="include: CTRL2;"/>
+145      * <p>
+146      * Explore the package <code>org.fourthline.cling.support.avtransport.callback</code> for more options.
+147      * </p>
+148      * <p>
+149      * Your control point can also subscribe with the service and listen for <code>LastChange</code>
+150      * events. Cling provides a parser so you get the same types and classes on the control point
+151      * as are available on the server - it's the same for sending and receiving the event data.
+152      * When you receive the "last change" string in your <code>SubscriptionCallback</code> you
+153      * can transform it, for example, this event could have been sent by the service after the
+154      * player transitioned from NoMediaPresent to Stopped state:
+155      * </p>
+156      * <a class="citation" id="avtransport_ctrl3" href="javacode://this#testCustomPlayer" style="include: CTRL3;"/>
+157      */
+158     @Test
+159     public void testCustomPlayer() throws Exception {
+160 
+161         LocalService<AVTransportService> service = MediaRendererSampleData.createAVTransportService();
+162 
+163         // Yes, it's a bit awkward to get the LastChange without a controlpoint
+164         final String[] lcValue = new String[1];
+165         PropertyChangeSupport pcs = service.getManager().getPropertyChangeSupport();
+166         pcs.addPropertyChangeListener(new PropertyChangeListener() {
+167             public void propertyChange(PropertyChangeEvent ev) {
+168                 if (ev.getPropertyName().equals("LastChange"))
+169                     lcValue[0] = (String) ev.getNewValue();
+170             }
+171         });
+172 
+173         final boolean[] assertions = new boolean[5];
+174 
+175         ActionCallback getDeviceCapsAction =
+176                 new GetDeviceCapabilities(service) {
+177                     @Override
+178                     public void received(ActionInvocation actionInvocation, DeviceCapabilities caps) {
+179                         assertEquals(caps.getPlayMedia()[0].toString(), "NETWORK");
+180                         assertEquals(caps.getRecMedia()[0].toString(), "NOT_IMPLEMENTED");
+181                         assertEquals(caps.getRecQualityModes()[0].toString(), "NOT_IMPLEMENTED");
+182                         assertions[0] = true;
+183                     }
+184 
+185                     @Override
+186                     public void failure(ActionInvocation invocation, UpnpResponse operation, String defaultMsg) {
+187                         // Something was wrong
+188                     }
+189                 };
+190         getDeviceCapsAction.run();
+191 
+192         ActionCallback setAVTransportURIAction = // DOC: CTRL1
+193                 new SetAVTransportURI(service, "http://10.0.0.1/file.mp3", "NO METADATA") {
+194                     @Override
+195                     public void failure(ActionInvocation invocation, UpnpResponse operation, String defaultMsg) {
+196                         // Something was wrong
+197                     }
+198                 }; // DOC: CTRL1
+199         setAVTransportURIAction.run();
+200 
+201         ActionCallback getTransportInfo =
+202                 new GetTransportInfo(service) {
+203                     @Override
+204                     public void received(ActionInvocation invocation, TransportInfo transportInfo) {
+205                         assertEquals(transportInfo.getCurrentTransportState(), TransportState.STOPPED);
+206                         assertions[1] = true;
+207                     }
+208 
+209                     @Override
+210                     public void failure(ActionInvocation invocation, UpnpResponse operation, String defaultMsg) {
+211                         // Something was wrong
+212                     }
+213                 };
+214         getTransportInfo.run();
+215 
+216         ActionCallback getMediaInfoAction =
+217                 new GetMediaInfo(service) {
+218                     @Override
+219                     public void received(ActionInvocation invocation, MediaInfo mediaInfo) {
+220                         assertEquals(mediaInfo.getCurrentURI(), "http://10.0.0.1/file.mp3");
+221                         assertEquals(mediaInfo.getCurrentURIMetaData(), "NO METADATA");
+222                         assertions[2] = true;
+223                     }
+224 
+225                     @Override
+226                     public void failure(ActionInvocation invocation, UpnpResponse operation, String defaultMsg) {
+227                         // Something was wrong
+228                     }
+229                 };
+230         getMediaInfoAction.run();
+231         
+232         ActionCallback getPositionInfoAction =
+233                 new GetPositionInfo(service) {
+234                     @Override
+235                     public void received(ActionInvocation invocation, PositionInfo positionInfo) {
+236                         assertEquals(positionInfo.getTrackURI(), "http://10.0.0.1/file.mp3");
+237                         assertEquals(positionInfo.getTrackMetaData(), "NO METADATA");
+238                         assertions[3] = true;
+239                     }
+240 
+241                     @Override
+242                     public void failure(ActionInvocation invocation, UpnpResponse operation, String defaultMsg) {
+243                         // Something was wrong
+244                         System.err.println(defaultMsg);
+245                     }
+246                 };
+247         getPositionInfoAction.run();
+248 
+249         ActionCallback getCurrentTransportActions =
+250                 new GetCurrentTransportActions(service) {
+251                     @Override
+252                     public void received(ActionInvocation invocation, TransportAction[] actions) {
+253                         List<TransportAction> currentActions = Arrays.asList(actions);
+254                         assert currentActions.contains(TransportAction.Play);
+255                         assert currentActions.contains(TransportAction.Stop);
+256                         assert currentActions.contains(TransportAction.Seek);
+257                         assertions[4] = true;
+258                     }
+259 
+260                     @Override
+261                     public void failure(ActionInvocation invocation, UpnpResponse operation, String defaultMsg) {
+262                         // Something was wrong
+263                     }
+264                 };
+265         getCurrentTransportActions.run();
+266 
+267         LastChangeAwareServiceManager manager = (LastChangeAwareServiceManager)service.getManager();    // DOC:INC2
+268         manager.fireLastChange();                                                                       // DOC:INC2
+269 
+270 
+271         String lastChangeString = lcValue[0];
+272         LastChange lastChange = new LastChange( // DOC:CTRL3
+273                 new AVTransportLastChangeParser(),
+274                 lastChangeString
+275         );
+276         assertEquals(
+277                 lastChange.getEventedValue(
+278                         0, // Instance ID!
+279                         AVTransportVariable.AVTransportURI.class
+280                 ).getValue(),
+281                 URI.create("http://10.0.0.1/file.mp3")
+282         );
+283         assertEquals(
+284                 lastChange.getEventedValue(
+285                         0,
+286                         AVTransportVariable.CurrentTrackURI.class
+287                 ).getValue(),
+288                 URI.create("http://10.0.0.1/file.mp3")
+289         );
+290         assertEquals(
+291                 lastChange.getEventedValue(
+292                         0,
+293                         AVTransportVariable.TransportState.class
+294                 ).getValue(),
+295                 TransportState.STOPPED
+296         );// DOC:CTRL3
+297 
+298         ActionCallback playAction = // DOC:CTRL2
+299                 new Play(service) {
+300                     @Override
+301                     public void failure(ActionInvocation invocation, UpnpResponse operation, String defaultMsg) {
+302                         // Something was wrong
+303                     }
+304                 }; // DOC:CTRL2
+305         playAction.run();
+306 
+307         manager.fireLastChange();
+308 
+309         lastChangeString = lcValue[0];
+310         lastChange = new LastChange(
+311                 new AVTransportLastChangeParser(),
+312                 lastChangeString
+313         );
+314         assertEquals(
+315                 lastChange.getEventedValue(
+316                         0,
+317                         AVTransportVariable.TransportState.class
+318                 ).getValue(),
+319                 TransportState.PLAYING
+320         );
+321 
+322         ActionCallback stopAction =
+323                 new Stop(service) {
+324                     @Override
+325                     public void failure(ActionInvocation invocation, UpnpResponse operation, String defaultMsg) {
+326                         // Something was wrong
+327                     }
+328                 };
+329         stopAction.run();
+330 
+331         manager.fireLastChange();
+332 
+333         lastChangeString = lcValue[0];
+334         lastChange = new LastChange(
+335                 new AVTransportLastChangeParser(),
+336                 lastChangeString
+337         );
+338         assertEquals(
+339                 lastChange.getEventedValue(
+340                         0,
+341                         AVTransportVariable.TransportState.class
+342                 ).getValue(),
+343                 TransportState.STOPPED
+344         );
+345 
+346         for (boolean assertion : assertions) {
+347             assertEquals(assertion, true);
+348         }
+349 
+350     }
+351 
+352 }
+Copyright © 2016 4th Line GmbH, Switzerland. All rights reserved.
